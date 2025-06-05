@@ -1,15 +1,18 @@
 {
   "name": "hl-code",
   "displayName": "Highlight Code",
-  "description": "Highlights selected code lines with a custom background color and bookmark name",
+  "description": "Highlights selected code lines with a custom background color, bookmark name, and comments",
   "version": "0.0.1",
+  "publisher": "ivankrivenko",
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
