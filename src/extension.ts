@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 
-// Сохраняем декорации, чтобы удалять их при необходимости
 let decorationType: vscode.TextEditorDecorationType | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  // Регистрация команды
+  console.log('Extension "Highlight Code" is now active!');
+
   let disposable = vscode.commands.registerCommand('highlightCode.highlight', () => {
+    console.log('Command highlightCode.highlight triggered!');
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
       vscode.window.showErrorMessage('No active editor!');
@@ -18,27 +19,33 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Получаем выделение
     const selection = editor.selection;
-    const range = new vscode.Range(selection.start, selection.end);
+
+    // Создаём диапазон, охватывающий целые строки
+    const startLine = selection.start.line;
+    const endLine = selection.end.line;
+    const range = new vscode.Range(
+      new vscode.Position(startLine, 0), // Начало первой строки
+      new vscode.Position(endLine, editor.document.lineAt(endLine).text.length) // Конец последней строки
+    );
 
     // Удаляем предыдущую декорацию, если она существует
     if (decorationType) {
       decorationType.dispose();
     }
 
-    // Создаем новую декорацию с цветом фона
+    // Создаём новую декорацию для целых строк
     decorationType = vscode.window.createTextEditorDecorationType({
-      backgroundColor: 'rgba(255, 255, 0, 0.05)', // Желтый фон с прозрачностью
-      isWholeLine: false // Применяется только к выделенному тексту
+      backgroundColor: 'rgba(255, 255, 0, 0.3)', // Желтый фон с прозрачностью
+      isWholeLine: true // Подсвечивать всю строку
     });
 
-    // Применяем декорацию к выделенному диапазону
+    // Применяем декорацию к диапазону
     editor.setDecorations(decorationType, [range]);
 
     // Показываем уведомление
-    vscode.window.showInformationMessage('Code highlighted!');
+    vscode.window.showInformationMessage('Lines highlighted!');
   });
 
-  // Добавляем команду в подписки контекста
   context.subscriptions.push(disposable);
 }
 
