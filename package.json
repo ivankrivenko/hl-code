@@ -1,7 +1,7 @@
 {
   "name": "hl-code",
   "displayName": "Highlight Code",
-  "description": "Highlights selected code with a custom background color",
+  "description": "Highlights selected code lines with a custom background color and bookmark name",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.75.0"
@@ -16,6 +16,10 @@
       {
         "command": "highlightCode.highlight",
         "title": "Highlight Selected Code"
+      },
+      {
+        "command": "highlightCode.clearHighlights",
+        "title": "Clear Highlights"
       }
     ],
     "menus": {
@@ -23,6 +27,11 @@
         {
           "when": "editorHasSelection",
           "command": "highlightCode.highlight",
+          "group": "modification"
+        },
+        {
+          "when": "editorTextFocus",
+          "command": "highlightCode.clearHighlights",
           "group": "modification"
         }
       ]
