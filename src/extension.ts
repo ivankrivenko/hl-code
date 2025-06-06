@@ -172,10 +172,11 @@ export function activate(context: vscode.ExtensionContext) {
       const startLine = document.positionAt(match.index).line;
       const endLine = document.positionAt(match.index + match[0].length).line - 1;
 
-      if (startLine < endLine) {
+      if (startLine <= endLine) {
+        // Включаем строки с комментариями в диапазон подсветки
         const range = new vscode.Range(
-          new vscode.Position(startLine + 1, 0),
-          new vscode.Position(endLine, document.lineAt(endLine).text.length)
+          new vscode.Position(startLine, 0),
+          new vscode.Position(endLine + 1, 0)
         );
         const colorValue = colorMap[colorLabel] || 'rgba(255, 255, 0, 0.3)';
         const decorationType = vscode.window.createTextEditorDecorationType({
@@ -311,26 +312,36 @@ export function activate(context: vscode.ExtensionContext) {
       isWholeLine: true
     });
 
-    // Применяем декорацию
-    editor.setDecorations(decorationType, ranges);
-
-    // Сохраняем закладку
-    bookmarks.push({
-      name: bookmarkName,
-      color: colorValue,
-      ranges,
-      decoration: decorationType,
-      fileUri: document.uri.toString()
-    });
-
-    // Вставляем комментарии
+    // Корректируем диапазоны с учётом комментариев
+    const adjustedRanges: vscode.Range[] = [];
+    let lineOffset = 0;
     await editor.edit(editBuilder => {
       ranges.forEach(range => {
         const startComment = createComment(bookmarkName, colorLabel, true, languageId);
         const endComment = createComment(bookmarkName, colorLabel, false, languageId);
-        editBuilder.insert(new vscode.Position(range.start.line, 0), startComment + '\n');
-        editBuilder.insert(new vscode.Position(range.end.line + 1, 0), endComment + '\n');
+        editBuilder.insert(new vscode.Position(range.start.line + lineOffset, 0), startComment + '\n');
+        editBuilder.insert(new vscode.Position(range.end.line + lineOffset + 1, 0), endComment + '\n');
+        // Увеличиваем смещение для следующих диапазонов
+        lineOffset += 2;
+        // Создаём новый диапазон, включающий комментарии
+        const adjustedRange = new vscode.Range(
+          new vscode.Position(range.start.line + lineOffset - 2, 0),
+          new vscode.Position(range.end.line + lineOffset, 0)
+        );
+        adjustedRanges.push(adjustedRange);
       });
+    });
+
+    // Применяем декорацию к скорректированным диапазонам
+    editor.setDecorations(decorationType, adjustedRanges);
+
+    // Сохраняем закладку с новым диапазоном
+    bookmarks.push({
+      name: bookmarkName,
+      color: colorValue,
+      ranges: adjustedRanges,
+      decoration: decorationType,
+      fileUri: document.uri.toString()
     });
 
     // Обновляем Tree View
@@ -348,38 +359,38 @@ export function activate(context: vscode.ExtensionContext) {
     })));
 
     // Показываем уведомление
-    vscode.window.showInformationMessage(`Bookmark "${bookmarkName}" created with ${ranges.length} line(s) highlighted!`);
+    vscode.window.showInformationMessage(`Bookmark "${bookmarkName}" created with ${adjustedRanges.length} line(s) highlighted!`);
   });
 
   // Команда для очистки всех подсветок
   let clearDisposable = vscode.commands.registerCommand('highlightCode.clearHighlights', async () => {
-  const editor = vscode.window.activeTextEditor;
-  if (editor) {
-    const document = editor.document;
-    const text = document.getText();
-    const languageId = document.languageId;
-    const { start, end } = getCommentMarkers(languageId);
-    const regex = new RegExp(
-      `${start.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')} (?:hl-code|/hl-code)\\s"[^"]+"\\s\\w+\\s*(?:${end.replace(/[-[\]*/]/g, '\\$&')})?\\n?`,
-      'g'
-    );
-    const newText = text.replace(regex, '');
-    await editor.edit(editBuilder => {
-      editBuilder.replace(
-        new vscode.Range(
-          document.positionAt(0),
-          document.positionAt(text.length)
-        ),
-        newText
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+      const document = editor.document;
+      const text = document.getText();
+      const languageId = document.languageId;
+      const { start, end } = getCommentMarkers(languageId);
+      const regex = new RegExp(
+        `${start.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')} (?:hl-code|/hl-code)\\s"[^"]+"\\s\\w+\\s*(?:${end.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')})?\\n?`,
+        'g'
       );
-    });
-  }
-  bookmarks.forEach(bookmark => bookmark.decoration.dispose());
-  bookmarks = [];
-  treeDataProvider?.updateBookmarks(bookmarks);
-  context.workspaceState.update('bookmarks', []);
-  vscode.window.showInformationMessage('All highlights and comments cleared!');
-});
+      const newText = text.replace(regex, '');
+      await editor.edit(editBuilder => {
+        editBuilder.replace(
+          new vscode.Range(
+            document.positionAt(0),
+            document.positionAt(text.length)
+          ),
+          newText
+        );
+      });
+    }
+    bookmarks.forEach(bookmark => bookmark.decoration.dispose());
+    bookmarks = [];
+    treeDataProvider?.updateBookmarks(bookmarks);
+    context.workspaceState.update('bookmarks', []);
+    vscode.window.showInformationMessage('All highlights and comments cleared!');
+  });
 
   // Команда для перехода к закладке
   let navigateDisposable = vscode.commands.registerCommand('highlightCode.navigateToBookmark', async (bookmark: Bookmark) => {
