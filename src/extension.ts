@@ -159,10 +159,11 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     const colorMap: { [key: string]: string } = {
-      Yellow: 'rgba(255, 255, 0, 0.3)',
-      Red: 'rgba(255, 0, 0, 0.3)',
-      Green: 'rgba(0, 255, 0, 0.3)',
-      Blue: 'rgba(0, 0, 255, 0.3)'
+      Yellow: 'rgba(255, 255, 0, 0.1)',
+      Red: 'rgba(255, 0, 50, 0.1)',
+      Green: 'rgba(100, 255, 0, 0.1)',
+      Blue: 'rgba(0, 150, 205, 0.1)'
+
     };
 
     let match;
@@ -269,10 +270,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Форма для выбора цвета
     const colors = [
-      { label: 'Yellow', value: 'rgba(255, 255, 0, 0.3)' },
-      { label: 'Red', value: 'rgba(255, 0, 0, 0.3)' },
-      { label: 'Green', value: 'rgba(0, 255, 0, 0.3)' },
-      { label: 'Blue', value: 'rgba(0, 0, 255, 0.3)' }
+      { label: 'Yellow', value: 'rgba(255, 255, 0, 0.1)' },
+      { label: 'Red', value: 'rgba(255, 0, 50, 0.1)' },
+      { label: 'Green', value: 'rgba(100, 255, 0, 0.1)' },
+      { label: 'Blue', value: 'rgba(0, 150, 205, 0.1)' }
     ];
     const selectedColor = await vscode.window.showQuickPick(
       colors.map(c => c.label),
