@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 // Интерфейс для хранения данных о закладке (для сохранения)
 interface BookmarkData {
@@ -9,15 +10,78 @@ interface BookmarkData {
 }
 
 // Интерфейс для рабочего массива закладок
-interface Bookmark extends BookmarkData {
+interface Bookmark {
+  name: string;
+  color: string;
+  ranges: vscode.Range[];
   decoration: vscode.TextEditorDecorationType;
+  fileUri: string;
+}
+
+// Класс для представления закладки в Tree View
+class BookmarkTreeItem extends vscode.TreeItem {
+  constructor(
+    public readonly bookmark: Bookmark,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState
+  ) {
+    super(bookmark.name, collapsibleState);
+    this.tooltip = `Bookmark: ${bookmark.name}\nFile: ${vscode.Uri.parse(bookmark.fileUri).fsPath}\nColor: ${bookmark.color}`;
+    this.description = path.basename(vscode.Uri.parse(bookmark.fileUri).fsPath);
+    // Устанавливаем цветную иконку
+    const colorKey = bookmark.color.split(',')[0].replace('rgba(', '').toLowerCase();
+    const themeColor = new vscode.ThemeColor(`charts.${colorKey === '255, 255, 0' ? 'yellow' : colorKey === '255, 0, 0' ? 'red' : colorKey === '0, 255, 0' ? 'green' : 'blue'}`);
+    this.iconPath = new vscode.ThemeIcon('bookmark', themeColor);
+    // Команда для перехода к закладке
+    this.command = {
+      command: 'highlightCode.navigateToBookmark',
+      title: 'Navigate to Bookmark',
+      arguments: [bookmark]
+    };
+  }
+}
+
+// Провайдер данных для Tree View
+class BookmarkTreeDataProvider implements vscode.TreeDataProvider<BookmarkTreeItem> {
+  private _onDidChangeTreeData: vscode.EventEmitter<BookmarkTreeItem | undefined | null | void> = new vscode.EventEmitter<BookmarkTreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<BookmarkTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+  constructor(private bookmarks: Bookmark[]) {}
+
+  getTreeItem(element: BookmarkTreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(element?: BookmarkTreeItem): Thenable<BookmarkTreeItem[]> {
+    if (element) {
+      return Promise.resolve([]);
+    }
+    return Promise.resolve(
+      this.bookmarks.map(bookmark => new BookmarkTreeItem(bookmark, vscode.TreeItemCollapsibleState.None))
+    );
+  }
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire();
+  }
+
+  updateBookmarks(newBookmarks: Bookmark[]): void {
+    this.bookmarks = newBookmarks;
+    this.refresh();
+  }
 }
 
 // Массив для хранения всех закладок
 let bookmarks: Bookmark[] = [];
+let treeDataProvider: BookmarkTreeDataProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Extension "Highlight Code" is now active!');
+
+  // Инициализация Tree View
+  treeDataProvider = new BookmarkTreeDataProvider(bookmarks);
+  vscode.window.createTreeView('highlightCode.bookmarks', {
+    treeDataProvider
+  });
 
   // Функция для преобразования сохранённых данных в рабочие закладки
   function restoreBookmarks(savedBookmarks: BookmarkData[]): Bookmark[] {
@@ -47,6 +111,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Загружаем сохранённые закладки
   const savedBookmarks = context.workspaceState.get<BookmarkData[]>('bookmarks', []);
   bookmarks = restoreBookmarks(savedBookmarks);
+  treeDataProvider?.updateBookmarks(bookmarks);
 
   // Функция для определения типа комментария в зависимости от языка
   function getCommentMarkers(languageId: string): { start: string; end: string } {
@@ -63,7 +128,6 @@ export function activate(context: vscode.ExtensionContext) {
       case 'cpp':
       case 'c':
       case 'java':
-      case 'php':
         return { start: '//', end: '' };
       default:
         return { start: '//', end: '' };
@@ -134,6 +198,9 @@ export function activate(context: vscode.ExtensionContext) {
         });
       }
     }
+
+    // Обновляем Tree View
+    treeDataProvider?.updateBookmarks(bookmarks);
 
     // Сохраняем обновлённые закладки
     context.workspaceState.update('bookmarks', bookmarks.map(b => ({
@@ -266,6 +333,9 @@ export function activate(context: vscode.ExtensionContext) {
       });
     });
 
+    // Обновляем Tree View
+    treeDataProvider?.updateBookmarks(bookmarks);
+
     // Сохраняем закладки в workspaceState
     context.workspaceState.update('bookmarks', bookmarks.map(b => ({
       name: b.name,
@@ -282,15 +352,48 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   // Команда для очистки всех подсветок
-  let clearDisposable = vscode.commands.registerCommand('highlightCode.clearHighlights', () => {
-    bookmarks.forEach(bookmark => bookmark.decoration.dispose());
-    bookmarks.length = 0;
-    context.workspaceState.update('bookmarks', []);
-    vscode.window.showInformationMessage('All highlights cleared!');
+  let clearDisposable = vscode.commands.registerCommand('highlightCode.clearHighlights', async () => {
+  const editor = vscode.window.activeTextEditor;
+  if (editor) {
+    const document = editor.document;
+    const text = document.getText();
+    const languageId = document.languageId;
+    const { start, end } = getCommentMarkers(languageId);
+    const regex = new RegExp(
+      `${start.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')} (?:hl-code|/hl-code)\\s"[^"]+"\\s\\w+\\s*(?:${end.replace(/[-[\]*/]/g, '\\$&')})?\\n?`,
+      'g'
+    );
+    const newText = text.replace(regex, '');
+    await editor.edit(editBuilder => {
+      editBuilder.replace(
+        new vscode.Range(
+          document.positionAt(0),
+          document.positionAt(text.length)
+        ),
+        newText
+      );
+    });
+  }
+  bookmarks.forEach(bookmark => bookmark.decoration.dispose());
+  bookmarks = [];
+  treeDataProvider?.updateBookmarks(bookmarks);
+  context.workspaceState.update('bookmarks', []);
+  vscode.window.showInformationMessage('All highlights and comments cleared!');
+});
+
+  // Команда для перехода к закладке
+  let navigateDisposable = vscode.commands.registerCommand('highlightCode.navigateToBookmark', async (bookmark: Bookmark) => {
+    const uri = vscode.Uri.parse(bookmark.fileUri);
+    const document = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(document);
+    if (bookmark.ranges.length > 0) {
+      editor.revealRange(bookmark.ranges[0], vscode.TextEditorRevealType.InCenter);
+      editor.selection = new vscode.Selection(bookmark.ranges[0].start, bookmark.ranges[0].end);
+    }
   });
 
   // Регистрируем команды
-  context.subscriptions.push(highlightDisposable, clearDisposable);
+  context.subscriptions.push(highlightDisposable, clearDisposable, navigateDisposable);
 }
 
 function lift(str: string): string {
@@ -298,7 +401,7 @@ function lift(str: string): string {
 }
 
 export function deactivate(context: vscode.ExtensionContext) {
-  bookmarks.forEach(bookmark => bookmark.decoration.dispose());
+  bookmarks.forEach(b => b.decoration.dispose());
   bookmarks.length = 0;
   context.workspaceState.update('bookmarks', []);
 }

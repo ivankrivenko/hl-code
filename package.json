@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onView:highlightCode.bookmarks"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -23,8 +24,30 @@
       {
         "command": "highlightCode.clearHighlights",
         "title": "Clear Highlights"
+      },
+      {
+        "command": "highlightCode.navigateToBookmark",
+        "title": "Navigate to Bookmark"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "highlightCode",
+          "title": "Highlight Code Bookmarks",
+          "icon": "media/bookmark.svg"
+        }
+      ]
+    },
+    "views": {
+      "highlightCode": [
+        {
+          "id": "highlightCode.bookmarks",
+          "name": "Bookmarks",
+          "icon": "media/bookmark.svg"
+        }
+      ]
+    },
     "menus": {
       "editor/context": [
         {
